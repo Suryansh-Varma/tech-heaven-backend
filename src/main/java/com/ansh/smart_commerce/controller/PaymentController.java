@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.*;
 import com.ansh.smart_commerce.dto.ApiResponse;
 import com.ansh.smart_commerce.dto.PaymentResponse;
 import com.ansh.smart_commerce.service.PaymentService;
+import com.ansh.smart_commerce.service.razorpay.RazorpayOrderResult;
 
 @RestController
 @RequestMapping("/payments")
@@ -40,5 +41,13 @@ public class PaymentController {
     public ResponseEntity<ApiResponse<PaymentResponse>> getPaymentByOrder(@PathVariable Long orderId) {
         return ResponseEntity.ok(
                 ApiResponse.success("Payment retrieved", paymentService.getPaymentByOrder(orderId)));
+    }
+
+    @PostMapping("/razorpay/order/{orderId}")
+    public ResponseEntity<ApiResponse<RazorpayOrderResult>> createRazorpayOrder(
+            @PathVariable Long orderId,
+            @RequestParam(defaultValue = "INR") String currency) {
+        return ResponseEntity.ok(
+                ApiResponse.success("Razorpay order created", paymentService.createRazorpayOrder(orderId, currency)));
     }
 }

@@ -17,6 +17,8 @@ import com.ansh.smart_commerce.exception.OrderNotFoundException;
 import com.ansh.smart_commerce.exception.PaymentFailedException;
 import com.ansh.smart_commerce.repository.OrderRepository;
 import com.ansh.smart_commerce.repository.PaymentRepository;
+import com.ansh.smart_commerce.service.razorpay.RazorpayGateway;
+import com.ansh.smart_commerce.service.razorpay.RazorpayOrderResult;
 
 @Service
 public class PaymentService {
@@ -25,10 +27,12 @@ public class PaymentService {
 
     private final PaymentRepository paymentRepository;
     private final OrderRepository orderRepository;
+    private final RazorpayGateway razorpayGateway;
 
-    public PaymentService(PaymentRepository paymentRepository, OrderRepository orderRepository) {
+    public PaymentService(PaymentRepository paymentRepository, OrderRepository orderRepository, RazorpayGateway razorpayGateway) {
         this.paymentRepository = paymentRepository;
         this.orderRepository = orderRepository;
+        this.razorpayGateway = razorpayGateway;
     }
 
     @Transactional
@@ -81,6 +85,27 @@ public class PaymentService {
         Payment payment = paymentRepository.findByOrder(order)
                 .orElseThrow(() -> new PaymentFailedException("No payment found for order id: " + orderId));
         return PaymentResponse.from(payment);
+    }
+
+    @Transactional
+    public RazorpayOrderResult createRazorpayOrder(Long orderId, String currency) {
+        Order order = resolveOrder(orderId);
+        long amountInPaise = Math.round(order.getTotalAmount() * 100);
+        RazorpayOrderResult result = razorpayGateway.createOrder(amountInPaise, currency, "order-" + orderId);
+
+        Payment existingPayment = paymentRepository.findByOrder(order).orElse(null);
+        if (existingPayment != null && existingPayment.getPaymentStatus() == PaymentStatus.PENDING) {
+            existingPayment.setTransactionId(result.getOrderId());
+            existingPayment.setAmount(order.getTotalAmount());
+            existingPayment.setCreatedAt(LocalDateTime.now());
+            paymentRepository.save(existingPayment);
+            return result;
+        }
+
+        Payment payment = new Payment(order, PaymentMethod.RAZORPAY, PaymentStatus.PENDING, result.getOrderId(), order.getTotalAmount(), LocalDateTime.now());
+        paymentRepository.save(payment);
+
+        return result;
     }
 
     private Payment resolvePayment(Long paymentId) {
